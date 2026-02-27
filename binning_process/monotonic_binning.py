@@ -63,7 +63,7 @@ def _compute_woe_iv_table(cuts: list, x: np.ndarray, y: np.ndarray,
     """
     edges  = [-np.inf] + sorted(cuts) + [np.inf]
     labels = [f"({edges[i]:.4g}, {edges[i+1]:.4g}]" for i in range(len(edges) - 1)]
-    bin_idx = pd.cut(x, bins=edges, labels=False, right=True)
+    bin_idx = pd.cut(x, bins=edges, labels=False, right=False)
 
     total_event    = max(int(y.sum()), 1)
     total_nonevent = max(int((1 - y).sum()), 1)
@@ -115,7 +115,7 @@ def _enforce_monotonic_by_merge(cuts: list, x: np.ndarray, y: np.ndarray,
 
     for _ in range(100):
         edges   = [-np.inf] + sorted(cuts) + [np.inf]
-        bin_idx = pd.cut(x, bins=edges, labels=False, right=True)
+        bin_idx = pd.cut(x, bins=edges, labels=False, right=False)
 
         # Tính event rate từng bin
         event_rates = []
@@ -284,7 +284,7 @@ class _BaseBinner(BaseEstimator, TransformerMixin):
         x_proc  = _cap_outliers(x, self.lower_pct, self.upper_pct) \
                   if self.cap_outliers else x.copy()
         edges   = [-np.inf] + sorted(self.cuts_) + [np.inf]
-        bin_idx = pd.cut(x_proc, bins=edges, labels=False, right=True)
+        bin_idx = pd.cut(x_proc, bins=edges, labels=False, right=False)
         woe_map = dict(enumerate(self.woe_table_["woe"].values))
         result  = bin_idx.map(woe_map)
 
@@ -405,7 +405,7 @@ class IsotonicBinner(_BaseBinner):
         pcts      = np.linspace(0, 100, self.n_init_bins + 1)[1:-1]
         init_cuts = np.unique(np.nanpercentile(x, pcts)).tolist()
         edges     = [-np.inf] + init_cuts + [np.inf]
-        bin_idx   = pd.cut(x, bins=edges, labels=False, right=True)
+        bin_idx   = pd.cut(x, bins=edges, labels=False, right=False)
 
         # B2: Event rate + bin center cho từng bin
         centers, rates, weights = [], [], []
@@ -496,7 +496,7 @@ class QuantileMonotonicBinner(_BaseBinner):
             if not cuts:
                 break
             edges   = [-np.inf] + sorted(cuts) + [np.inf]
-            bin_idx = pd.cut(x, bins=edges, labels=False, right=True)
+            bin_idx = pd.cut(x, bins=edges, labels=False, right=False)
             found   = False
 
             for i in range(len(edges) - 1):
@@ -625,7 +625,7 @@ class ChiMergeBinner(_BaseBinner):
         pcts      = np.linspace(0, 100, self.n_init_bins + 1)[1:-1]
         init_cuts = sorted(list(np.unique(np.nanpercentile(x, pcts))))
         edges     = [-np.inf] + init_cuts + [np.inf]
-        bin_idx   = pd.cut(x, bins=edges, labels=False, right=True)
+        bin_idx   = pd.cut(x, bins=edges, labels=False, right=False)
 
         n_bins = len(edges) - 1
         counts = np.zeros((n_bins, 2), dtype=int)

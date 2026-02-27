@@ -373,7 +373,7 @@ class MergeTrace:
 def _get_bin_stats(cuts: list, x: np.ndarray, y: np.ndarray):
     """Tính event_rate, woe, n_samples cho từng bin."""
     edges   = [-np.inf] + sorted(cuts) + [np.inf]
-    bin_idx = pd.cut(x, bins=edges, labels=False, right=True)
+    bin_idx = pd.cut(x, bins=edges, labels=False, right=False)
 
     total_event    = max(int(y.sum()), 1)
     total_nonevent = max(int((1 - y).sum()), 1)
