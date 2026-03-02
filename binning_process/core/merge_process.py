@@ -11,18 +11,16 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
-import warnings
-warnings.filterwarnings("ignore")
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.gridspec import GridSpec
+
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
-import copy
-
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import numpy as np
+import pandas as pd
+import warnings
+warnings.filterwarnings("ignore")
 EPSILON = 1e-9
 
 
@@ -138,12 +136,15 @@ class MergeTrace:
 
     # ── Vẽ 1 bước ────────────────────────────────────────────────────────────
 
-    def plot_step(self, step_no: int, ax_er=None, ax_woe=None, standalone=True):
+    def plot_step(self, step_no: int, ax_er=None, ax_woe=None, ax_n=None, standalone=True):
         """
-        Vẽ chi tiết 1 bước: event rate bar chart, highlight cặp bị gộp.
+        Vẽ chi tiết 1 bước: event rate | WOE | số lượng mẫu mỗi bin.
 
         Args:
             step_no   : Index trong self.steps (0 = ban đầu)
+            ax_er     : Axes cho event rate (nếu standalone=False)
+            ax_woe    : Axes cho WOE (nếu standalone=False)
+            ax_n      : Axes cho n_samples (nếu standalone=False)
             standalone: Nếu True thì tạo figure riêng
         """
         if step_no >= len(self.steps):
@@ -153,7 +154,7 @@ class MergeTrace:
         n    = len(step.event_rates)
 
         if standalone:
-            fig, (ax_er, ax_woe) = plt.subplots(1, 2, figsize=(12, 4))
+            fig, (ax_er, ax_woe, ax_n) = plt.subplots(1, 3, figsize=(16, 4))
             title = (f"Bước {step.step_no} — {self.feature_name} | "
                      f"{step.n_bins_before} bins → {step.n_bins_after} bins")
             if step.merged_pair:
@@ -231,15 +232,45 @@ class MergeTrace:
             ax_woe.set_ylabel("WOE")
             ax_woe.set_xlabel("Bin index")
 
+        # ── N Samples bars ────────────────────────────────────────────────
+        if step.n_samples and ax_n is not None:
+            n_colors = []
+            for i in range(len(step.n_samples)):
+                if step.merged_pair and i in step.merged_pair:
+                    n_colors.append("#e74c3c")
+                else:
+                    n_colors.append("#9b59b6")
+
+            ax_n.bar(range(len(step.n_samples)), step.n_samples,
+                      color=n_colors, edgecolor="white", linewidth=0.8, zorder=3)
+
+            total = sum(step.n_samples)
+            for i, ns in enumerate(step.n_samples):
+                pct = ns / total * 100
+                ax_n.text(i, ns + total * 0.005,
+                           f"{ns:,}\n({pct:.1f}%)",
+                           ha="center", va="bottom", fontsize=7.5)
+
+            # Đường min_bin_size = 5% tham khảo
+            ax_n.axhline(total * 0.05, color="red", linewidth=1,
+                          linestyle="--", alpha=0.6, label="Min 5%")
+
+            ax_n.set_title("Số lượng mẫu (n) từng Bin", fontweight="bold")
+            ax_n.set_xticks(range(len(step.n_samples)))
+            ax_n.set_ylabel("n samples")
+            ax_n.set_xlabel("Bin index")
+            ax_n.legend(fontsize=8)
+
         if standalone:
             plt.tight_layout()
             return plt.gcf()
 
     # ── Vẽ tất cả bước (grid) ────────────────────────────────────────────────
 
-    def plot_steps(self, max_steps: Optional[int] = None, figsize_per_row=(14, 3.8)):
+    def plot_steps(self, max_steps: Optional[int] = None, figsize_per_row=(18, 3.8)):
         """
         Vẽ tất cả các bước merge thành 1 figure lớn (grid theo hàng).
+        Mỗi hàng: Event Rate | WOE | N Samples
 
         Args:
             max_steps: Giới hạn số bước vẽ. None = vẽ tất cả.
@@ -262,8 +293,9 @@ class MergeTrace:
         )
 
         for row_idx, step in enumerate(steps_to_plot):
-            ax_er  = fig.add_subplot(n_rows, 2, row_idx * 2 + 1)
-            ax_woe = fig.add_subplot(n_rows, 2, row_idx * 2 + 2)
+            ax_er  = fig.add_subplot(n_rows, 3, row_idx * 3 + 1)
+            ax_woe = fig.add_subplot(n_rows, 3, row_idx * 3 + 2)
+            ax_n   = fig.add_subplot(n_rows, 3, row_idx * 3 + 3)
 
             # Row label bên trái
             step_label = f"Bước {step.step_no}"
@@ -274,10 +306,9 @@ class MergeTrace:
             ax_er.set_ylabel(step_label, fontsize=9, fontweight="bold", rotation=90,
                               labelpad=40)
 
-            self.plot_step(step.step_no, ax_er=ax_er, ax_woe=ax_woe, standalone=False)
+            self.plot_step(step.step_no, ax_er=ax_er, ax_woe=ax_woe, ax_n=ax_n, standalone=False)
 
             # Title từng row
-            n = len(step.event_rates)
             if step.merged_pair:
                 row_title = (f"{step.n_bins_before} bins → {step.n_bins_after} bins | "
                              f"Gộp Bin{step.merged_pair[0]}&Bin{step.merged_pair[1]} "
@@ -364,6 +395,8 @@ class MergeTrace:
 
         plt.tight_layout()
         return fig
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
