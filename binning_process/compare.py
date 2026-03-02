@@ -58,7 +58,7 @@ def compare_methods(
         max_bins       = max_bins,
         special_values = special_values,
     )
-
+    print(max_bins, n_init_bins, max_depth)
     # Methods có n_init_bins
     has_init_bins = {
         "Isotonic", "QuantileMonotonic", "ChiMerge", "Spearman", "LogOdds"

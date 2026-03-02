@@ -39,6 +39,14 @@ class QuantileMonotonicBinner(BaseBinner):
 
         # B2: Gộp bins quá nhỏ trước khi enforce monotonic
         cuts = self._merge_small_bins(cuts, x, y)
+
+        # B3: Giới hạn số bins theo max_bins (n_bins = len(cuts) + 1)
+        # Lấy đều các cut theo chỉ số để giữ phân bố cân bằng (tránh bin cuối quá rộng)
+        if len(cuts) >= self.max_bins:
+            sc = sorted(cuts)
+            n_keep = self.max_bins - 1
+            indices = np.linspace(0, len(sc) - 1, n_keep, dtype=int)
+            cuts = [sc[i] for i in indices]
         return cuts
 
     def _merge_small_bins(self, cuts: list, x: np.ndarray, y: np.ndarray) -> list:
