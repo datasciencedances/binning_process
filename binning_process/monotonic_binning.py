@@ -814,13 +814,12 @@ def compare_methods(
         special_values = special_values,
     )
     methods = {
-        "1. IsotonicBinner"    : IsotonicBinner(**kwargs),
-        "2. QuantileMonotonic" : QuantileMonotonicBinner(**kwargs),
-        "3. DecisionTree"      : DecisionTreeBinner(**kwargs),
-        "4. ChiMerge"          : ChiMergeBinner(**kwargs),
-        "5. MDLP"              : MDLPBinner(**kwargs),
+        "IsotonicBinner"    : IsotonicBinner(**kwargs),
+        "QuantileMonotonic" : QuantileMonotonicBinner(**kwargs),
+        "DecisionTree"      : DecisionTreeBinner(**kwargs),
+        "ChiMerge"          : ChiMergeBinner(**kwargs),
+        "MDLP"              : MDLPBinner(**kwargs),
     }
-
     rows = []
     for name, model in methods.items():
         try:
@@ -851,7 +850,7 @@ def compare_methods(
     print(f"{'='*70}")
     print(result[["Method", "IV", "n_bins", "Monotonic", "Direction", "IV_Rating"]].to_string(index=False))
     print(f"{'='*70}\n")
-    return result
+    return result, methods
 
 
 # ══════════════════════════════════════════════════════════════════════════════
