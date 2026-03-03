@@ -65,4 +65,4 @@ class LogOddsBinner(BaseBinner):
         cuts = [c for c in cuts if x.min() < c < x.max()]
         if len(cuts) >= self.max_bins:
             cuts = cuts[:self.max_bins - 1]
-        return cuts
+        return cuts, None

@@ -38,9 +38,8 @@ from binning_process.core.utils import iv_rating
 ALL_METHODS = {
     # ── Supervised ────────────────────────────────────────────────
     "Isotonic"        : IsotonicBinner,
-    "QuantileMonotonic": QuantileMonotonicBinner,
-    "DecisionTree"    : DecisionTreeBinner,
     "ChiMerge"        : ChiMergeBinner,
+    "DecisionTree"    : DecisionTreeBinner,
     "MDLP"            : MDLPBinner
 }
 def compare_methods(
@@ -101,11 +100,11 @@ def compare_methods(
                 "Method"   : name,
                 "Group"    : "supervised" if name not in {"EqualWidth", "JenksBreaks"}
                              else "unsupervised",
-                "IV"       : round(model.iv_, 4),
+                "IV"       : round(model.final_iv_, 4),
                 "n_bins"   : len(model.final_cuts_) + 1,
                 "Monotonic": "✓" if model.is_monotonic() else "✗",
                 "Direction": model.direction_,
-                "IV_Rating": iv_rating(model.iv_),
+                "IV_Rating": iv_rating(model.final_iv_),
                 "Cuts"     : [round(c, 2) for c in model.final_cuts_],
             })
         except Exception as e:

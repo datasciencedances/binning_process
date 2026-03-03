@@ -22,7 +22,7 @@ import pandas as pd
 import warnings
 warnings.filterwarnings("ignore")
 EPSILON = 1e-9
-
+EVENT_RATE_SAME_THRESHOLD = 1e-3
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  DATA STRUCTURE — Lưu trạng thái 1 bước merge
@@ -492,6 +492,9 @@ def enforce_monotonic_traced(
         # Tìm vi phạm đầu tiên
         violation_idx = None
         for i in range(len(er) - 1):
+            if abs(er[i] - er[i+1]) < 1e-3:
+                violation_idx = i
+                break
             if direction == "ascending"  and er[i] > er[i+1] + EPSILON:
                 violation_idx = i
                 break
@@ -538,7 +541,7 @@ def enforce_monotonic_traced(
         else:
             cuts = sorted_cuts
 
-        er_new, woe_new, n_new = _get_bin_stats(cuts, x, y)
+        # er_new, woe_new, n_new = _get_bin_stats(cuts, x, y)
 
         step = MergeStep(
             step_no       = step_no,

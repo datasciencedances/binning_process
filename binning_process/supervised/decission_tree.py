@@ -46,7 +46,7 @@ class DecisionTreeBinner(BaseBinner):
         thresholds = tree.tree_.threshold
         cuts = sorted({float(t) for t in thresholds if t != -2.0})
 
-        # Giới hạn bins: giữ cuts có lv thấp (gần root = quan trọng hơn)
+        # Giới hạn bins: giữ nhiều nhất max_bins - 1 cut-points
         if len(cuts) >= self.max_bins:
             cuts = cuts[:self.max_bins - 1]
 

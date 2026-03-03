@@ -47,8 +47,12 @@ class BaseBinner(BaseEstimator, TransformerMixin):
         self.final_cuts_    : List[float]            = []
         self.trace_         : Optional[MergeTrace]   = None
         self.direction_     : str                    = direction
-        self.woe_table_     : Optional[pd.DataFrame] = None
-        self.iv_            : float                  = 0.0
+        self.init_woe_table_ : Optional[pd.DataFrame] = None
+        self.algo_woe_table_ : Optional[pd.DataFrame] = None
+        self.final_woe_table_ : Optional[pd.DataFrame] = None
+        self.final_iv_      : float                  = 0.0
+        self.algo_iv_       : float                  = 0.0
+        self.init_iv_       : float                  = 0.0
         self.special_table_ : Optional[pd.DataFrame] = None
 
     # ── Preprocessing ──────────────────────────────────────────────────────
@@ -118,23 +122,37 @@ class BaseBinner(BaseEstimator, TransformerMixin):
             feature_name=self.feature_name, verbose=False
         )
 
-        self.woe_table_ = compute_woe_iv_table(
+        if self.init_cuts_ is not None:
+            self.init_woe_table_ = compute_woe_iv_table(
+                self.init_cuts_, x_main, y_main, self.feature_name
+            )
+            self.init_iv_ = self.init_woe_table_["iv_bin"].sum()
+        else:
+            self.init_woe_table_ = None
+            self.init_iv_ = 0.0
+    
+        self.algo_woe_table_ = compute_woe_iv_table(
+                self.algo_cuts_, x_main, y_main, self.feature_name
+            )
+        self.algo_iv_ = self.algo_woe_table_["iv_bin"].sum()
+    
+        self.final_woe_table_ = compute_woe_iv_table(
             self.final_cuts_, x_main, y_main, self.feature_name
         )
-        self.iv_ = self.woe_table_["iv_bin"].sum()
+        self.final_iv_ = self.final_woe_table_["iv_bin"].sum()
         return self
 
     # ── Transform ──────────────────────────────────────────────────────────
 
     def transform(self, x: pd.Series) -> pd.Series:
-        if self.woe_table_ is None:
+        if self.final_woe_table_ is None:
             raise RuntimeError("Chưa fit. Gọi .fit() trước.")
 
         x_proc  = cap_outliers(x, self.lower_pct, self.upper_pct) \
                   if self.cap_outliers_ else x.copy()
         edges   = [-np.inf] + sorted(self.cuts_) + [np.inf]
         bin_idx = pd.cut(x_proc, bins=edges, labels=False, right=False)
-        woe_map = dict(enumerate(self.woe_table_["woe"].values))
+        woe_map = dict(enumerate(self.final_woe_table_["woe"].values))
         result  = bin_idx.map(woe_map)
 
         if self.special_table_ is not None:
@@ -152,11 +170,11 @@ class BaseBinner(BaseEstimator, TransformerMixin):
     # ── Summary ────────────────────────────────────────────────────────────
 
     def summary(self) -> pd.DataFrame:
-        if self.woe_table_ is None:
+        if self.final_woe_table_ is None:
             raise RuntimeError("Chưa fit.")
         cols = ["feature", "bin", "n_total", "n_event", "n_nonevent",
                 "event_rate", "woe", "iv_bin", "iv_total"]
-        df = self.woe_table_.copy()
+        df = self.final_woe_table_.copy()
         df["iv_total"] = round(self.iv_, 4)
         main = df[cols]
         if self.special_table_ is not None:
@@ -165,47 +183,75 @@ class BaseBinner(BaseEstimator, TransformerMixin):
         return main
 
     def is_monotonic(self) -> bool:
-        if self.woe_table_ is None:
+        if self.final_woe_table_ is None:
             return False
-        return is_monotonic_series(self.woe_table_["woe"], self.direction_)
+        return is_monotonic_series(self.final_woe_table_["woe"], self.direction_)
 
     # ── Plot ───────────────────────────────────────────────────────────────
 
     def plot(self, figsize=(14, 5)):
-        if self.woe_table_ is None:
+        if self.final_woe_table_ is None:
             raise RuntimeError("Chưa fit.")
-        df    = self.woe_table_
-        fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+        tables_to_plot = []
+        table_labels = []
+
+        # Optionally plot init_woe_table_ first
+        if hasattr(self, "init_woe_table_") and self.init_woe_table_ is not None:
+            tables_to_plot.append(self.init_woe_table_)
+            table_labels.append("Init")
+
+        # Optionally plot algo_woe_table_ second
+        if hasattr(self, "algo_woe_table_") and self.algo_woe_table_ is not None:
+            tables_to_plot.append(self.algo_woe_table_)
+            table_labels.append("Algo")
+
+        # Always plot final_woe_table_ last
+        tables_to_plot.append(self.final_woe_table_)
+        table_labels.append("Final")
+
+        n_tables = len(tables_to_plot)
+        fig, axes = plt.subplots(n_tables, 2, figsize=(figsize[0], figsize[1] * n_tables))
+        if n_tables == 1:
+            axes = [axes]  # axes: shape (2,) -> [(ax0, ax1)]
+
         arrow = "↑" if self.direction_ == "ascending" else "↓"
+
         fig.suptitle(
             f"{self.__class__.__name__}  |  {self.feature_name}  |  "
-            f"IV = {self.iv_:.4f}  |  Monotonic: {self.is_monotonic()}  {arrow}",
+            f"Final IV = {self.final_iv_:.4f}  |  Monotonic: {self.is_monotonic()}  {arrow}",
             fontsize=12, fontweight="bold"
         )
-        x_pos  = list(range(len(df)))
-        ax     = axes[0]
-        colors = ["#e74c3c" if w >= 0 else "#27ae60" for w in df["woe"]]
-        ax.bar(x_pos, df["woe"], color=colors, edgecolor="white", linewidth=0.8)
-        ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
-        ax.set_title("WOE theo Bin", fontweight="bold")
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
-        ax.set_ylabel("WOE")
-        for i, (w, n) in enumerate(zip(df["woe"], df["n_total"])):
-            offset = 0.03 if w >= 0 else -0.06
-            ax.text(i, w + offset, f"{w:.3f}\nn={n}", ha="center", fontsize=7.5)
 
-        ax     = axes[1]
-        er_pct = df["event_rate"] * 100
-        ax.plot(x_pos, er_pct, marker="o", color="#2980b9",
-                linewidth=2, markersize=8, zorder=3)
-        ax.fill_between(x_pos, er_pct, alpha=0.12, color="#2980b9")
-        ax.set_title(f"Event Rate (%) theo Bin  {arrow}", fontweight="bold")
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
-        ax.set_ylabel("Event Rate (%)")
-        for i, er in enumerate(er_pct):
-            ax.text(i, er + 0.3, f"{er:.1f}%", ha="center", fontsize=8)
+        for row, (df, lbl) in enumerate(zip(tables_to_plot, table_labels)):
+            row_axes = axes[row] if n_tables > 1 else axes[0]
+            x_pos  = list(range(len(df)))
+            ax     = row_axes[0]
+            colors = ["#e74c3c" if w >= 0 else "#27ae60" for w in df["woe"]]
+            ax.bar(x_pos, df["woe"], color=colors, edgecolor="white", linewidth=0.8)
+            ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+            ax.set_title(f"{lbl} WOE theo Bin | IV = {df['iv_total'].values[0]:.4f}", fontweight="bold")
+            if lbl != "Init":
+                ax.set_xticks(x_pos)
+                ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
+            ax.set_ylabel("WOE")
+            if lbl != "Init":
+                for i, (w, n) in enumerate(zip(df["woe"], df["n_total"])):
+                    offset = 0.03 if w >= 0 else -0.06
+                    ax.text(i, w + offset, f"{w:.3f}\nn={n}", ha="center", fontsize=7.5)
+
+            ax     = row_axes[1]
+            er_pct = df["event_rate"] * 100
+            ax.plot(x_pos, er_pct, marker="o", color="#2980b9",
+                    linewidth=2, markersize=8, zorder=3)
+            ax.fill_between(x_pos, er_pct, alpha=0.12, color="#2980b9")
+            ax.set_title(f"{lbl} Event Rate (%) theo Bin  {arrow}", fontweight="bold")
+            if lbl != "Init":
+                ax.set_xticks(x_pos)
+                ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
+            ax.set_ylabel("Event Rate (%)")
+            for i, er in enumerate(er_pct):
+                ax.text(i, er + 0.3, f"{er:.1f}%", ha="center", fontsize=8)
 
         plt.tight_layout()
         return fig
