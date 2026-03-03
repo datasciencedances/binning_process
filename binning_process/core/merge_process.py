@@ -22,7 +22,7 @@ import pandas as pd
 import warnings
 warnings.filterwarnings("ignore")
 EPSILON = 1e-9
-EVENT_RATE_SAME_THRESHOLD = 1e-3
+SAME_ER_THRESHOLD = 0.005
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  DATA STRUCTURE — Lưu trạng thái 1 bước merge
@@ -492,7 +492,7 @@ def enforce_monotonic_traced(
         # Tìm vi phạm đầu tiên
         violation_idx = None
         for i in range(len(er) - 1):
-            if abs(er[i] - er[i+1]) < 1e-3:
+            if abs(er[i] - er[i+1]) < SAME_ER_THRESHOLD:
                 violation_idx = i
                 break
             if direction == "ascending"  and er[i] > er[i+1] + EPSILON:
