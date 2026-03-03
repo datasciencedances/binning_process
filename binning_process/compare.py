@@ -15,6 +15,25 @@ from binning_process.unsupervised import EqualWidthBinner, JenksNaturalBreaksBin
 from binning_process.core.utils import iv_rating
 
 
+
+
+# # Tất cả methods có sẵn — thêm method mới vào đây
+# ALL_METHODS = {
+#     # ── Supervised ────────────────────────────────────────────────
+#     "Isotonic"        : IsotonicBinner,
+#     "QuantileMonotonic": QuantileMonotonicBinner,
+#     "DecisionTree"    : DecisionTreeBinner,
+#     "ChiMerge"        : ChiMergeBinner,
+#     "MDLP"            : MDLPBinner,
+#     "Spearman"        : SpearmanBinner,
+#     "LogOdds"         : LogOddsBinner,
+#     "KSOptimal"       : KSOptimalBinner,
+#     # ── Unsupervised ──────────────────────────────────────────────
+#     "EqualWidth"      : EqualWidthBinner,
+#     "JenksBreaks"     : JenksNaturalBreaksBinner,
+# }
+
+
 # Tất cả methods có sẵn — thêm method mới vào đây
 ALL_METHODS = {
     # ── Supervised ────────────────────────────────────────────────
@@ -22,16 +41,8 @@ ALL_METHODS = {
     "QuantileMonotonic": QuantileMonotonicBinner,
     "DecisionTree"    : DecisionTreeBinner,
     "ChiMerge"        : ChiMergeBinner,
-    "MDLP"            : MDLPBinner,
-    "Spearman"        : SpearmanBinner,
-    "LogOdds"         : LogOddsBinner,
-    "KSOptimal"       : KSOptimalBinner,
-    # ── Unsupervised ──────────────────────────────────────────────
-    "EqualWidth"      : EqualWidthBinner,
-    "JenksBreaks"     : JenksNaturalBreaksBinner,
+    "MDLP"            : MDLPBinner
 }
-
-
 def compare_methods(
     x               : pd.Series,
     y               : pd.Series,
@@ -91,11 +102,11 @@ def compare_methods(
                 "Group"    : "supervised" if name not in {"EqualWidth", "JenksBreaks"}
                              else "unsupervised",
                 "IV"       : round(model.iv_, 4),
-                "n_bins"   : len(model.cuts_) + 1,
+                "n_bins"   : len(model.final_cuts_) + 1,
                 "Monotonic": "✓" if model.is_monotonic() else "✗",
                 "Direction": model.direction_,
                 "IV_Rating": iv_rating(model.iv_),
-                "Cuts"     : [round(c, 2) for c in model.cuts_],
+                "Cuts"     : [round(c, 2) for c in model.final_cuts_],
             })
         except Exception as e:
             rows.append({

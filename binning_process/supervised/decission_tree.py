@@ -50,4 +50,4 @@ class DecisionTreeBinner(BaseBinner):
         if len(cuts) >= self.max_bins:
             cuts = cuts[:self.max_bins - 1]
 
-        return cuts
+        return cuts, None

@@ -43,7 +43,8 @@ class BaseBinner(BaseEstimator, TransformerMixin):
 
         # Sau fit
         self.init_cuts_     : List[float]            = []
-        self.cuts_          : List[float]            = []
+        self.algo_cuts_     : List[float]            = []
+        self.final_cuts_    : List[float]            = []
         self.trace_         : Optional[MergeTrace]   = None
         self.direction_     : str                    = direction
         self.woe_table_     : Optional[pd.DataFrame] = None
@@ -111,13 +112,14 @@ class BaseBinner(BaseEstimator, TransformerMixin):
         else:
             self.direction_ = self.direction
 
-        self.init_cuts_          = self._find_cuts(x_main, y_main)
-        self.trace_, self.cuts_  = enforce_monotonic_traced(
-            self.init_cuts_, x_main, y_main, self.direction_,
+        self.algo_cuts_, self.init_cuts_ = self._find_cuts(x_main, y_main)
+        self.trace_, self.final_cuts_  = enforce_monotonic_traced(
+            self.algo_cuts_, x_main, y_main, self.direction_,
             feature_name=self.feature_name, verbose=False
         )
+
         self.woe_table_ = compute_woe_iv_table(
-            self.cuts_, x_main, y_main, self.feature_name
+            self.final_cuts_, x_main, y_main, self.feature_name
         )
         self.iv_ = self.woe_table_["iv_bin"].sum()
         return self

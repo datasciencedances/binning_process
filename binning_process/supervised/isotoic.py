@@ -3,6 +3,8 @@ from typing import List
 import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 from binning_process.core.base import BaseBinner
+from binning_process.core.utils import quantile_cuts
+
 EPSILON = 1e-9
 
 class IsotonicBinner(BaseBinner):
@@ -30,9 +32,8 @@ class IsotonicBinner(BaseBinner):
         self.n_init_bins = n_init_bins
 
     def _find_cuts(self, x: np.ndarray, y: np.ndarray) -> List[float]:
-        # B1: Quantile chia sơ bộ
-        pcts      = np.linspace(0, 100, self.n_init_bins + 1)[1:-1]
-        init_cuts = np.unique(np.nanpercentile(x, pcts)).tolist()
+        # B1: Quantile chia sơ bộ (tái sử dụng quantile_cuts từ core.utils)
+        init_cuts = quantile_cuts(x, self.n_init_bins)
         edges     = [-np.inf] + init_cuts + [np.inf]
         bin_idx   = pd.cut(x, bins=edges, labels=False, right=False)
 
@@ -72,4 +73,4 @@ class IsotonicBinner(BaseBinner):
         if len(cuts) >= self.max_bins:
             cuts = cuts[:self.max_bins - 1]
 
-        return cuts
+        return cuts, sorted(init_cuts)

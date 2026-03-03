@@ -48,8 +48,8 @@ class SpearmanBinner(BaseBinner):
         return abs(corr) if not np.isnan(corr) else 0.0
 
     def _find_cuts(self, x: np.ndarray, y: np.ndarray) -> List[float]:
-        cuts = quantile_cuts(x, self.n_init_bins)
-
+        init_cuts = quantile_cuts(x, self.n_init_bins)
+        cuts = list(sorted(init_cuts))
         # Greedy: xóa cut nào gây mất ít Spearman nhất
         while len(cuts) >= self.max_bins:
             best_score = -np.inf
@@ -64,4 +64,4 @@ class SpearmanBinner(BaseBinner):
 
             cuts = cuts[:best_idx] + cuts[best_idx + 1:]
 
-        return cuts
+        return cuts, sorted(init_cuts)

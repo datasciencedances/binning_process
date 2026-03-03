@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from binning_process.core.base import BaseBinner
+from binning_process.core.utils import quantile_cuts
 
 class ChiMergeBinner(BaseBinner):
     """
@@ -47,9 +48,8 @@ class ChiMergeBinner(BaseBinner):
         return float(chi2)
 
     def _find_cuts(self, x: np.ndarray, y: np.ndarray) -> List[float]:
-        # B1: Chia nhiều bins nhỏ
-        pcts      = np.linspace(0, 100, self.n_init_bins + 1)[1:-1]
-        init_cuts = sorted(list(np.unique(np.nanpercentile(x, pcts))))
+        # B1: Chia nhiều bins nhỏ (tái sử dụng quantile_cuts từ core.utils)
+        init_cuts = quantile_cuts(x, self.n_init_bins)
         edges     = [-np.inf] + init_cuts + [np.inf]
         bin_idx   = pd.cut(x, bins=edges, labels=False, right=False)
 
@@ -87,4 +87,4 @@ class ChiMergeBinner(BaseBinner):
             if min_idx < len(current_cuts):
                 current_cuts.pop(min_idx)
 
-        return sorted(current_cuts)
+        return sorted(current_cuts), sorted(init_cuts)
