@@ -189,7 +189,7 @@ class BaseBinner(BaseEstimator, TransformerMixin):
 
     # ── Plot ───────────────────────────────────────────────────────────────
 
-    def plot(self, figsize=(14, 5)):
+    def plot(self, figsize=(18, 4)):
         if self.final_woe_table_ is None:
             raise RuntimeError("Chưa fit.")
 
@@ -211,9 +211,12 @@ class BaseBinner(BaseEstimator, TransformerMixin):
         table_labels.append("Final")
 
         n_tables = len(tables_to_plot)
-        fig, axes = plt.subplots(n_tables, 2, figsize=(figsize[0], figsize[1] * n_tables))
+        # Bố cục mới: 2 hàng (WOE, Event Rate) × n_tables cột (Init / Algo / Final)
+        # Giữ width tổng ~figsize[0], tăng height để chart bớt dẹt.
+        fig, axes = plt.subplots(2, n_tables, figsize=(figsize[0], figsize[1] * 2))
         if n_tables == 1:
-            axes = [axes]  # axes: shape (2,) -> [(ax0, ax1)]
+            # Khi chỉ có 1 bảng, matplotlib trả về mảng 1D → reshape về (2,1)
+            axes = np.array([[axes[0]], [axes[1]]])
 
         arrow = "↑" if self.direction_ == "ascending" else "↓"
 
@@ -223,14 +226,14 @@ class BaseBinner(BaseEstimator, TransformerMixin):
             fontsize=12, fontweight="bold"
         )
 
-        for row, (df, lbl) in enumerate(zip(tables_to_plot, table_labels)):
-            row_axes = axes[row] if n_tables > 1 else axes[0]
+        for col, (df, lbl) in enumerate(zip(tables_to_plot, table_labels)):
             x_pos  = list(range(len(df)))
-            ax     = row_axes[0]
+            # Hàng 0: WOE
+            ax     = axes[0, col]
             colors = ["#e74c3c" if w >= 0 else "#27ae60" for w in df["woe"]]
             ax.bar(x_pos, df["woe"], color=colors, edgecolor="white", linewidth=0.8)
             ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
-            ax.set_title(f"{lbl} WOE theo Bin | IV = {df['iv_total'].values[0]:.4f}", fontweight="bold")
+            ax.set_title(f"WOE theo {lbl} Bin | IV = {df['iv_total'].values[0]:.4f}", fontweight="bold")
             if lbl != "Init":
                 ax.set_xticks(x_pos)
                 ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
@@ -240,12 +243,13 @@ class BaseBinner(BaseEstimator, TransformerMixin):
                     offset = 0.03 if w >= 0 else -0.06
                     ax.text(i, w + offset, f"{w:.3f}\nn={n}", ha="center", fontsize=7.5)
 
-            ax     = row_axes[1]
+            # Hàng 1: Event Rate
+            ax     = axes[1, col]
             er_pct = df["event_rate"] * 100
             ax.plot(x_pos, er_pct, marker="o", color="#2980b9",
                     linewidth=2, markersize=8, zorder=3)
             ax.fill_between(x_pos, er_pct, alpha=0.12, color="#2980b9")
-            ax.set_title(f"{lbl} Event Rate (%) theo Bin  {arrow}", fontweight="bold")
+            ax.set_title(f"Event Rate (%) theo {lbl} Bin  {arrow}", fontweight="bold")
             if lbl != "Init":
                 ax.set_xticks(x_pos)
                 ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
