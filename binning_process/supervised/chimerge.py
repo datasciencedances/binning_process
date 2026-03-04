@@ -65,19 +65,10 @@ class ChiMergeBinner(BaseBinner):
 
         # B2: Gộp dần bin giống nhau nhất
         for _ in range(500):
-            if len(counts) <= self.max_bins:
-                # Kiểm tra nếu tất cả bins đã đủ khác biệt thì dừng
-                chi2_vals = [self._chi2(counts[i], counts[i+1])
-                              for i in range(len(counts)-1)]
-                if chi2_vals and min(chi2_vals) >= chi2_threshold:
-                    break
-
-            if len(counts) <= 2:
-                break
-
+            # Kiểm tra nếu tất cả bins đã đủ khác biệt thì dừng
             chi2_vals = [self._chi2(counts[i], counts[i+1])
-                          for i in range(len(counts)-1)]
-            if not chi2_vals:
+                            for i in range(len(counts)-1)]
+            if chi2_vals and min(chi2_vals) >= chi2_threshold:
                 break
 
             min_idx  = int(np.argmin(chi2_vals))

@@ -121,7 +121,10 @@ class MDLPBinner(BaseBinner):
         self._n_total = len(x)
         cuts = []
         self._recursive_split(x, y, cuts)
-        cuts = sorted(set(cuts))
-        if len(cuts) >= self.max_bins:
-            cuts = cuts[:self.max_bins - 1]
+        real_cuts = []
+        for c in cuts:
+            left_side = x[x <= c]
+            if len(left_side) > 0:
+                real_cuts.append(float(np.max(left_side)))
+        cuts = sorted(set(real_cuts))
         return cuts, None

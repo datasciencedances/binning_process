@@ -1,5 +1,5 @@
 from .chimerge import ChiMergeBinner
-from .decission_tree import DecisionTreeBinner
+from .decision_tree import DecisionTreeBinner
 from .isotonic import IsotonicBinner
 from .ks_optimal import KSOptimalBinner
 from .mdlp import MDLPBinner

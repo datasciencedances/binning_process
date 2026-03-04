@@ -8,15 +8,19 @@ Hỗ trợ:
 
 import base64
 import io
-import sys
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from binning_process.compare import compare_methods
-from binning_process.core.utils import EPSILON, cap_outliers, compute_woe_iv_table
+from binning_process.core.utils import (
+    cap_outliers,
+    compute_psi as _compute_psi,
+    compute_woe_iv_table,
+    woe_table_to_pct_per_bin,
+)
 
 
 def fig_to_base64(fig, dpi: int = 100, **savefig_kw) -> str:
@@ -31,72 +35,25 @@ def fig_to_base64(fig, dpi: int = 100, **savefig_kw) -> str:
     return out
 
 
-def compute_psi(
-    p_train: np.ndarray,
-    p_valid: np.ndarray,
-    epsilon: float = EPSILON,
-) -> Tuple[float, np.ndarray]:
-    """
-    PSI (Population Stability Index) theo bin.
-    PSI_i = (p_valid_i - p_train_i) * ln(p_valid_i / p_train_i)
-    """
-    p_train = np.asarray(p_train, dtype=float)
-    p_valid = np.asarray(p_valid, dtype=float)
-    p_train = np.clip(p_train, epsilon, 1.0)
-    p_valid = np.clip(p_valid, epsilon, 1.0)
-    psi_bin = (p_valid - p_train) * np.log(p_valid / p_train)
-    return float(np.sum(psi_bin)), psi_bin
-
-
-def _woe_table_to_pct_per_bin(woe_table: pd.DataFrame) -> np.ndarray:
-    """Lấy tỷ lệ mẫu mỗi bin (n_total / sum(n_total)) từ bảng WOE."""
-    n_total = woe_table["n_total"].values.astype(float)
-    return n_total / max(n_total.sum(), 1.0)
-
-
 def _plot_final_woe_er(model) -> Optional[plt.Figure]:
     """
-    Plot final WOE, final event rate và số lượng mẫu (%) theo bin
-    cho Overview (1 hàng, 3 cột).
+    Plot final WOE, final event rate và tỷ lệ mẫu (%) theo bin (Overview).
+    Dùng _draw_woe_axes / _draw_event_rate_axes của BaseBinner cho 2 cột đầu.
     """
     df = getattr(model, "final_woe_table_", None)
     if df is None or df.empty:
         return None
 
     fig, axes = plt.subplots(1, 3, figsize=(13, 4))
-    # Đảm bảo axes là mảng 1D có 3 phần tử
     if not isinstance(axes, (list, tuple, np.ndarray)):
         axes = [axes]
     ax_woe, ax_er, ax_n = axes
 
-    x_pos = list(range(len(df)))
-    # WOE
-    colors = ["#e74c3c" if w >= 0 else "#27ae60" for w in df["woe"]]
-    ax_woe.bar(x_pos, df["woe"], color=colors, edgecolor="white", linewidth=0.8)
-    ax_woe.axhline(0, color="black", linewidth=0.8, linestyle="--")
-    ax_woe.set_title("Final WOE theo Bin", fontweight="bold")
-    ax_woe.set_xticks(x_pos)
-    ax_woe.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
-    ax_woe.set_ylabel("WOE")
-    for i, (w, n) in enumerate(zip(df["woe"], df["n_total"])):
-        offset = 0.03 if w >= 0 else -0.06
-        ax_woe.text(i, w + offset, f"{w:.3f}\nn={n}", ha="center", fontsize=7.5)
-
-    # Event rate
-    er_pct = df["event_rate"] * 100
-    ax_er.plot(x_pos, er_pct, marker="o", color="#2980b9",
-               linewidth=2, markersize=8, zorder=3)
-    ax_er.fill_between(x_pos, er_pct, alpha=0.12, color="#2980b9")
-
-    arrow = "↑" if getattr(model, "direction_", "ascending") == "ascending" else "↓"
-    ax_er.set_title(f"Final Event Rate (%) theo Bin  {arrow}", fontweight="bold")
-    ax_er.set_xticks(x_pos)
-    ax_er.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
-    ax_er.set_ylabel("Event Rate (%)")
-    for i, er in enumerate(er_pct):
-        ax_er.text(i, er + 0.3, f"{er:.1f}%", ha="center", fontsize=8)
+    model._draw_woe_axes(ax_woe, df, "Final")
+    model._draw_event_rate_axes(ax_er, df, "Final")
 
     # Số lượng mẫu từng bin (% n_total) + đường min_bin_size
+    x_pos = list(range(len(df)))
     total_n = df["n_total"].sum()
     n_pct = df["n_total"] / max(total_n, 1) * 100
     ax_n.bar(x_pos, n_pct, color="#9b59b6", edgecolor="white", linewidth=0.8, zorder=3)
@@ -152,23 +109,17 @@ def generate_compare_report(
             print(f"  Feature: {col} ...")
 
         try:
-            _stdout = sys.stdout
-            if not verbose:
-                sys.stdout = io.StringIO()
-            try:
-                result, fitted = compare_methods(
-                    x=x_train,
-                    y=y_train,
-                    feature_name=col,
-                    max_bins=max_bins,
-                    n_init_bins=n_init_bins,
-                    max_depth=max_depth,
-                    special_values=special_values,
-                    methods=methods,
-                )
-            finally:
-                if not verbose:
-                    sys.stdout = _stdout
+            result, fitted = compare_methods(
+                x=x_train,
+                y=y_train,
+                feature_name=col,
+                max_bins=max_bins,
+                n_init_bins=n_init_bins,
+                max_depth=max_depth,
+                special_values=special_values,
+                methods=methods,
+                verbose=verbose,
+            )
         except Exception as e:
             if verbose:
                 print(f"Lỗi feature {col}: {e}")
@@ -243,12 +194,12 @@ def generate_compare_report(
                         continue
 
                     woe_valid = compute_woe_iv_table(cuts, x_v, y_v, feature_name=col)
-                    p_train = _woe_table_to_pct_per_bin(woe_train)
-                    p_valid = _woe_table_to_pct_per_bin(woe_valid)
+                    p_train = woe_table_to_pct_per_bin(woe_train)
+                    p_valid = woe_table_to_pct_per_bin(woe_valid)
                     if len(p_train) != len(p_valid):
                         psi_by_method[name] = float("nan")
                     else:
-                        psi_total, _ = compute_psi(p_train, p_valid)
+                        psi_total, _ = _compute_psi(p_train, p_valid)
                         psi_by_method[name] = round(psi_total, 4)
 
                     df_compare = pd.DataFrame({

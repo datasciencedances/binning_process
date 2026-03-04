@@ -4,8 +4,7 @@ import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 from binning_process.core.base import BaseBinner
 from binning_process.core.utils import quantile_cuts
-
-EPSILON = 1e-9
+from binning_process.core.values import EPSILON
 
 class IsotonicBinner(BaseBinner):
     """

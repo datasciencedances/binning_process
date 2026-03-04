@@ -15,15 +15,17 @@
 
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
 import warnings
+
+from binning_process.core.values import EPSILON, SAME_ER_THRESHOLD, SAME_WOE_THRESHOLD
+
 warnings.filterwarnings("ignore")
-EPSILON = 1e-9
-SAME_ER_THRESHOLD = 0.005
-SAME_WOE_THRESHOLD = 0.005
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  DATA STRUCTURE — Lưu trạng thái 1 bước merge
 # ══════════════════════════════════════════════════════════════════════════════
@@ -388,8 +390,8 @@ class MergeTrace:
                   f"WOE — SAU MERGE ({step_final.n_bins_after} bins) ✓")
 
         # Legend mũi tên
-        green_p = mpatches.Patch(color="#27ae60", label="Đi đúng chiều ✓")
-        red_p   = mpatches.Patch(color="#e74c3c", label="Vi phạm monotonic ✗")
+        green_p = plt.Patch(color="#27ae60", label="Đi đúng chiều ✓")
+        red_p   = plt.Patch(color="#e74c3c", label="Vi phạm monotonic ✗")
         fig.legend(handles=[green_p, red_p], loc="lower center",
                    ncol=2, fontsize=9, bbox_to_anchor=(0.5, -0.02))
 
@@ -436,7 +438,7 @@ def enforce_monotonic_traced(
     feature_name: str = "feature",
     method    : str = "event_rate",
     verbose   : bool = True,
-) -> MergeTrace:
+) -> Tuple[MergeTrace, List[float]]:
     """
     Phiên bản có TRACE của _enforce_monotonic_by_merge.
 
@@ -606,7 +608,7 @@ if __name__ == "__main__":
     print(f"Cuts ban đầu ({len(cuts)+1} bins): {[round(c,1) for c in cuts]}")
 
     # ── Chạy với trace ──────────────────────────────────────────────────
-    trace = enforce_monotonic_traced(
+    trace, cuts_final = enforce_monotonic_traced(
         cuts         = cuts,
         x            = x,
         y            = y,

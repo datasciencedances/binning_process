@@ -3,12 +3,12 @@ Utilities dùng chung cho tất cả Binners.
 Không import từ supervised/ hay unsupervised/ để tránh circular import.
 """
 
+from typing import List, Tuple
+
 import numpy as np
 import pandas as pd
 from scipy import stats
-from typing import List
-
-EPSILON = 1e-9
+from binning_process.core.values import EPSILON
 
 
 def detect_direction(x: np.ndarray, y: np.ndarray) -> str:
@@ -81,15 +81,45 @@ def is_monotonic_series(series: pd.Series, direction: str,
 
 
 def iv_rating(iv: float) -> str:
-    if iv is None: return ""
-    if iv < 0.02:  return "Vô dụng"
-    if iv < 0.1:   return "Yếu"
-    if iv < 0.3:   return "Trung bình"
-    if iv < 0.5:   return "Tốt"
+    if iv is None:
+        return ""
+    if iv < 0.02:
+        return "Vô dụng"
+    if iv < 0.1:
+        return "Yếu"
+    if iv < 0.3:
+        return "Trung bình"
+    if iv < 0.5:
+        return "Tốt"
     return "Nghi ngờ overfit"
 
 
 def quantile_cuts(x: np.ndarray, n_bins: int) -> List[float]:
     """Tạo cut-points từ quantile đều nhau."""
     pcts = np.linspace(0, 100, n_bins + 1)[1:-1]
-    return sorted(list(np.unique(np.nanpercentile(x, pcts))))
+    return sorted(list(np.unique(np.nanpercentile(x, pcts, method='lower'))))
+
+
+def woe_table_to_pct_per_bin(woe_table: pd.DataFrame) -> np.ndarray:
+    """Tỷ lệ mẫu mỗi bin: n_total / sum(n_total). Dùng cho PSI hoặc chart."""
+    n_total = woe_table["n_total"].values.astype(float)
+    return n_total / max(n_total.sum(), 1.0)
+
+
+def compute_psi(
+    p_train: np.ndarray,
+    p_valid: np.ndarray,
+    epsilon: float = EPSILON,
+) -> Tuple[float, np.ndarray]:
+    """
+    PSI (Population Stability Index) theo bin.
+    PSI_i = (p_valid_i - p_train_i) * ln(p_valid_i / p_train_i).
+    Returns:
+        (psi_total, psi_per_bin)
+    """
+    p_train = np.asarray(p_train, dtype=float)
+    p_valid = np.asarray(p_valid, dtype=float)
+    p_train = np.clip(p_train, epsilon, 1.0)
+    p_valid = np.clip(p_valid, epsilon, 1.0)
+    psi_bin = (p_valid - p_train) * np.log(p_valid / p_train)
+    return float(np.sum(psi_bin)), psi_bin
