@@ -30,8 +30,8 @@ def compute_woe_iv_table(cuts: list, x: np.ndarray, y: np.ndarray,
     IV    = Σ (%Event_i - %NonEvent_i) * WOE_i
     """
     edges   = [-np.inf] + sorted(cuts) + [np.inf]
-    labels  = [f"[{edges[i]:.4g}, {edges[i+1]:.4g})" for i in range(len(edges) - 1)]
-    bin_idx = pd.cut(x, bins=edges, labels=False, right=False)
+    labels  = [f"({edges[i]:.4g}, {edges[i+1]:.4g}]" for i in range(len(edges) - 1)]
+    bin_idx = pd.cut(x, bins=edges, labels=False, right=True, include_lowest=True)
 
     total_event    = max(int(y.sum()), 1)
     total_nonevent = max(int((1 - y).sum()), 1)

@@ -51,7 +51,7 @@ class ChiMergeBinner(BaseBinner):
         # B1: Chia nhiều bins nhỏ (tái sử dụng quantile_cuts từ core.utils)
         init_cuts = quantile_cuts(x, self.n_init_bins)
         edges     = [-np.inf] + init_cuts + [np.inf]
-        bin_idx   = pd.cut(x, bins=edges, labels=False, right=False)
+        bin_idx   = pd.cut(x, bins=edges, labels=False, right=True, include_lowest=True)
 
         n_bins = len(edges) - 1
         counts = np.zeros((n_bins, 2), dtype=int)

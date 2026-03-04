@@ -1,6 +1,6 @@
 from .chimerge import ChiMergeBinner
 from .decission_tree import DecisionTreeBinner
-from .isotoic import IsotonicBinner
+from .isotonic import IsotonicBinner
 from .ks_optimal import KSOptimalBinner
 from .mdlp import MDLPBinner
 from .quantile import QuantileMonotonicBinner

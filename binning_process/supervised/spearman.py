@@ -34,7 +34,7 @@ class SpearmanBinner(BaseBinner):
         if not cuts:
             return 0.0
         edges   = [-np.inf] + sorted(cuts) + [np.inf]
-        bin_idx = pd.cut(x, bins=edges, labels=False, right=False)
+        bin_idx = pd.cut(x, bins=edges, labels=False, right=True, include_lowest=True)
         er_list, idx_list = [], []
         for i in range(len(edges) - 1):
             mask = bin_idx == i

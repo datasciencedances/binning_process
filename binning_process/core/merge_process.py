@@ -23,7 +23,7 @@ import warnings
 warnings.filterwarnings("ignore")
 EPSILON = 1e-9
 SAME_ER_THRESHOLD = 0.005
-
+SAME_WOE_THRESHOLD = 0.005
 # ══════════════════════════════════════════════════════════════════════════════
 #  DATA STRUCTURE — Lưu trạng thái 1 bước merge
 # ══════════════════════════════════════════════════════════════════════════════
@@ -406,7 +406,7 @@ class MergeTrace:
 def _get_bin_stats(cuts: list, x: np.ndarray, y: np.ndarray):
     """Tính event_rate, woe, n_samples cho từng bin."""
     edges   = [-np.inf] + sorted(cuts) + [np.inf]
-    bin_idx = pd.cut(x, bins=edges, labels=False, right=False)
+    bin_idx = pd.cut(x, bins=edges, labels=False, right=True, include_lowest=True)
 
     total_event    = max(int(y.sum()), 1)
     total_nonevent = max(int((1 - y).sum()), 1)
@@ -434,6 +434,7 @@ def enforce_monotonic_traced(
     y         : np.ndarray,
     direction : str,
     feature_name: str = "feature",
+    method    : str = "event_rate",
     verbose   : bool = True,
 ) -> MergeTrace:
     """
@@ -484,23 +485,34 @@ def enforce_monotonic_traced(
     if verbose:
         print(f"  Bước 0 (ban đầu): {len(cuts)+1} bins | "
               f"Event rates: {[f'{e*100:.1f}%' for e in er0]}")
-
+    # Đưa tìm vi phạm về thành một hàm
+    def find_violation_idx_by_event_rate(er, direction):
+        for i in range(len(er) - 1):
+            if abs(er[i] - er[i+1]) < SAME_ER_THRESHOLD:
+                return i
+            if direction == "ascending"  and er[i] > er[i+1] + EPSILON:
+                return i
+            if direction == "descending" and er[i] < er[i+1] - EPSILON:
+                return i
+        return None
+    def find_violation_idx_by_woe(woe, direction):
+        for i in range(len(woe) - 1):
+            if abs(woe[i] - woe[i+1]) < SAME_WOE_THRESHOLD:
+                return i
+            if direction == "ascending"  and woe[i] > woe[i+1] + EPSILON:
+                return i
+            if direction == "descending" and woe[i] < woe[i+1] - EPSILON:
+                return i
+        return None
     # ── Vòng lặp merge ────────────────────────────────────────────────────
     for iteration in range(200):
         er, woe, ns = _get_bin_stats(cuts, x, y)
-
-        # Tìm vi phạm đầu tiên
-        violation_idx = None
-        for i in range(len(er) - 1):
-            if abs(er[i] - er[i+1]) < SAME_ER_THRESHOLD:
-                violation_idx = i
-                break
-            if direction == "ascending"  and er[i] > er[i+1] + EPSILON:
-                violation_idx = i
-                break
-            if direction == "descending" and er[i] < er[i+1] - EPSILON:
-                violation_idx = i
-                break
+        if method == "event_rate":
+            violation_idx = find_violation_idx_by_event_rate(er, direction)
+        elif method == "woe":
+            violation_idx = find_violation_idx_by_woe(woe, direction)
+        else:
+            raise ValueError(f"Invalid method: {method}")
 
         if violation_idx is None:
             # ── Đã monotonic: ghi bước cuối ──────────────────────────────

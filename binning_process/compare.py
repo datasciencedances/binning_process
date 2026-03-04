@@ -37,6 +37,7 @@ from binning_process.core.utils import iv_rating
 # Tất cả methods có sẵn — thêm method mới vào đây
 ALL_METHODS = {
     # ── Supervised ────────────────────────────────────────────────
+    "QuantileMonotonic": QuantileMonotonicBinner,
     "Isotonic"        : IsotonicBinner,
     "ChiMerge"        : ChiMergeBinner,
     "DecisionTree"    : DecisionTreeBinner,
