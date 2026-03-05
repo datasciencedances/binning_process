@@ -1,7 +1,8 @@
 import numpy as np
 from typing import List
 from binning_process.core.base import BaseBinner
-from binning_process.core.utils import quantile_cuts, EPSILON
+from binning_process.core.utils import quantile_cuts
+from binning_process.core.values import EPSILON
 from sklearn.isotonic import IsotonicRegression
 
 class LogOddsBinner(BaseBinner):

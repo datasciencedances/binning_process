@@ -1,22 +1,43 @@
 
-
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.base import BaseEstimator, TransformerMixin
-from typing import Optional, List
-
-from binning_process.core.utils import EPSILON, detect_direction, compute_woe_iv_table, cap_outliers, is_monotonic_series
-from binning_process.core.merge_process import enforce_monotonic_traced, MergeTrace
+"""
+BaseBinner: base class cho mọi Binner (supervised/unsupervised).
+Preprocessing, fit, transform, summary, plot. Subclass chỉ cần implement _find_cuts().
+"""
 
 import warnings
+from typing import List, Optional
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+
+from binning_process.core.merge_process import MergeTrace, enforce_monotonic_traced
+from binning_process.core.utils import (
+    cap_outliers,
+    compute_woe_iv_table,
+    detect_direction,
+    is_monotonic_series,
+)
+from binning_process.core.values import EPSILON
+
 warnings.filterwarnings("ignore")
+
 
 class BaseBinner(BaseEstimator, TransformerMixin):
     """
     Base class: preprocessing, fit/transform/summary/plot.
-    Mỗi subclass chỉ cần implement _find_cuts(x, y) → List[float].
+    Subclass chỉ cần implement _find_cuts(x, y) → (algo_cuts, init_cuts) hoặc (algo_cuts, None).
+
+    Public attributes sau fit():
+        final_cuts_: List[float] — cut-points cuối (sau monotonic merge).
+        final_woe_table_: pd.DataFrame — bảng WOE/IV theo bin (final).
+        final_iv_: float — Information Value cuối.
+        trace_: MergeTrace | None — lịch sử merge (để plot_steps).
+        direction_: str — "ascending" | "descending".
+        init_cuts_, algo_cuts_: List | None — cuts ban đầu / sau algo (nếu có).
+        init_woe_table_, algo_woe_table_: pd.DataFrame | None — bảng WOE tương ứng (nếu có).
+        special_table_: pd.DataFrame | None — WOE cho Missing/Special (nếu có).
     """
 
     def __init__(
@@ -150,8 +171,8 @@ class BaseBinner(BaseEstimator, TransformerMixin):
 
         x_proc  = cap_outliers(x, self.lower_pct, self.upper_pct) \
                   if self.cap_outliers_ else x.copy()
-        edges   = [-np.inf] + sorted(self.cuts_) + [np.inf]
-        bin_idx = pd.cut(x_proc, bins=edges, labels=False, right=False)
+        edges   = [-np.inf] + sorted(self.final_cuts_) + [np.inf]
+        bin_idx = pd.cut(x_proc, bins=edges, labels=False, right=True, include_lowest=True)
         woe_map = dict(enumerate(self.final_woe_table_["woe"].values))
         result  = bin_idx.map(woe_map)
 
@@ -175,7 +196,7 @@ class BaseBinner(BaseEstimator, TransformerMixin):
         cols = ["feature", "bin", "n_total", "n_event", "n_nonevent",
                 "event_rate", "woe", "iv_bin", "iv_total"]
         df = self.final_woe_table_.copy()
-        df["iv_total"] = round(self.iv_, 4)
+        df["iv_total"] = round(self.final_iv_, 4)
         main = df[cols]
         if self.special_table_ is not None:
             spec_cols = [c for c in cols if c in self.special_table_.columns]
@@ -187,71 +208,72 @@ class BaseBinner(BaseEstimator, TransformerMixin):
             return False
         return is_monotonic_series(self.final_woe_table_["woe"], self.direction_)
 
+    # ── Plot helpers (dùng nội bộ và có thể tái sử dụng từ report) ─────────
+
+    def _draw_woe_axes(self, ax, df: pd.DataFrame, label: str) -> None:
+        """Vẽ cột WOE lên axes cho một bảng WOE."""
+        x_pos = list(range(len(df)))
+        colors = ["#e74c3c" if w >= 0 else "#27ae60" for w in df["woe"]]
+        ax.bar(x_pos, df["woe"], color=colors, edgecolor="white", linewidth=0.8)
+        ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+        iv_val = df["iv_total"].values[0] if "iv_total" in df.columns else 0.0
+        ax.set_title(f"WOE theo {label} Bin | IV = {iv_val:.4f}", fontweight="bold")
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
+        ax.set_ylabel("WOE")
+        for i, (w, n) in enumerate(zip(df["woe"], df["n_total"])):
+            offset = 0.03 if w >= 0 else -0.06
+            ax.text(i, w + offset, f"{w:.3f}\nn={n}", ha="center", fontsize=7.5)
+
+    def _draw_event_rate_axes(self, ax, df: pd.DataFrame, label: str) -> None:
+        """Vẽ đường Event Rate (%) lên axes cho một bảng WOE."""
+        arrow = "↑" if self.direction_ == "ascending" else "↓"
+        x_pos = list(range(len(df)))
+        er_pct = df["event_rate"] * 100
+        ax.plot(x_pos, er_pct, marker="o", color="#2980b9",
+                linewidth=2, markersize=8, zorder=3)
+        ax.fill_between(x_pos, er_pct, alpha=0.12, color="#2980b9")
+        ax.set_title(f"Event Rate (%) theo {label} Bin  {arrow}", fontweight="bold")
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
+        ax.set_ylabel("Event Rate (%)")
+        for i, er in enumerate(er_pct):
+            ax.text(i, er + 0.3, f"{er:.1f}%", ha="center", fontsize=8)
+
     # ── Plot ───────────────────────────────────────────────────────────────
 
-    def plot(self, figsize=(14, 5)):
+    def plot(self, figsize=(18, 4)):
+        """Vẽ 2 hàng (WOE, Event Rate) × n cột (Init / Algo / Final)."""
         if self.final_woe_table_ is None:
             raise RuntimeError("Chưa fit.")
 
-        tables_to_plot = []
-        table_labels = []
+        tables_to_plot: List[pd.DataFrame] = []
+        table_labels: List[str] = []
 
-        # Optionally plot init_woe_table_ first
         if hasattr(self, "init_woe_table_") and self.init_woe_table_ is not None:
             tables_to_plot.append(self.init_woe_table_)
             table_labels.append("Init")
-
-        # Optionally plot algo_woe_table_ second
         if hasattr(self, "algo_woe_table_") and self.algo_woe_table_ is not None:
             tables_to_plot.append(self.algo_woe_table_)
             table_labels.append("Algo")
-
-        # Always plot final_woe_table_ last
         tables_to_plot.append(self.final_woe_table_)
         table_labels.append("Final")
 
         n_tables = len(tables_to_plot)
-        fig, axes = plt.subplots(n_tables, 2, figsize=(figsize[0], figsize[1] * n_tables))
+        fig, axes = plt.subplots(2, n_tables, figsize=(figsize[0], figsize[1] * 2))
         if n_tables == 1:
-            axes = [axes]  # axes: shape (2,) -> [(ax0, ax1)]
+            axes = np.array([[axes[0]], [axes[1]]])
 
         arrow = "↑" if self.direction_ == "ascending" else "↓"
-
         fig.suptitle(
             f"{self.__class__.__name__}  |  {self.feature_name}  |  "
             f"Final IV = {self.final_iv_:.4f}  |  Monotonic: {self.is_monotonic()}  {arrow}",
-            fontsize=12, fontweight="bold"
+            fontsize=12, fontweight="bold",
         )
 
-        for row, (df, lbl) in enumerate(zip(tables_to_plot, table_labels)):
-            row_axes = axes[row] if n_tables > 1 else axes[0]
-            x_pos  = list(range(len(df)))
-            ax     = row_axes[0]
-            colors = ["#e74c3c" if w >= 0 else "#27ae60" for w in df["woe"]]
-            ax.bar(x_pos, df["woe"], color=colors, edgecolor="white", linewidth=0.8)
-            ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
-            ax.set_title(f"{lbl} WOE theo Bin | IV = {df['iv_total'].values[0]:.4f}", fontweight="bold")
-            if lbl != "Init":
-                ax.set_xticks(x_pos)
-                ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
-            ax.set_ylabel("WOE")
-            if lbl != "Init":
-                for i, (w, n) in enumerate(zip(df["woe"], df["n_total"])):
-                    offset = 0.03 if w >= 0 else -0.06
-                    ax.text(i, w + offset, f"{w:.3f}\nn={n}", ha="center", fontsize=7.5)
-
-            ax     = row_axes[1]
-            er_pct = df["event_rate"] * 100
-            ax.plot(x_pos, er_pct, marker="o", color="#2980b9",
-                    linewidth=2, markersize=8, zorder=3)
-            ax.fill_between(x_pos, er_pct, alpha=0.12, color="#2980b9")
-            ax.set_title(f"{lbl} Event Rate (%) theo Bin  {arrow}", fontweight="bold")
-            if lbl != "Init":
-                ax.set_xticks(x_pos)
-                ax.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
-            ax.set_ylabel("Event Rate (%)")
-            for i, er in enumerate(er_pct):
-                ax.text(i, er + 0.3, f"{er:.1f}%", ha="center", fontsize=8)
+        for col, (df, lbl) in enumerate(zip(tables_to_plot, table_labels)):
+            self._draw_woe_axes(axes[0, col], df, lbl)
+            self._draw_event_rate_axes(axes[1, col], df, lbl)
 
         plt.tight_layout()
         return fig

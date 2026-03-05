@@ -15,14 +15,16 @@
 
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
 import warnings
+
+from binning_process.core.values import EPSILON, SAME_ER_THRESHOLD, SAME_WOE_THRESHOLD
+
 warnings.filterwarnings("ignore")
-EPSILON = 1e-9
-EVENT_RATE_SAME_THRESHOLD = 1e-3
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  DATA STRUCTURE — Lưu trạng thái 1 bước merge
@@ -388,8 +390,8 @@ class MergeTrace:
                   f"WOE — SAU MERGE ({step_final.n_bins_after} bins) ✓")
 
         # Legend mũi tên
-        green_p = mpatches.Patch(color="#27ae60", label="Đi đúng chiều ✓")
-        red_p   = mpatches.Patch(color="#e74c3c", label="Vi phạm monotonic ✗")
+        green_p = plt.Patch(color="#27ae60", label="Đi đúng chiều ✓")
+        red_p   = plt.Patch(color="#e74c3c", label="Vi phạm monotonic ✗")
         fig.legend(handles=[green_p, red_p], loc="lower center",
                    ncol=2, fontsize=9, bbox_to_anchor=(0.5, -0.02))
 
@@ -406,7 +408,7 @@ class MergeTrace:
 def _get_bin_stats(cuts: list, x: np.ndarray, y: np.ndarray):
     """Tính event_rate, woe, n_samples cho từng bin."""
     edges   = [-np.inf] + sorted(cuts) + [np.inf]
-    bin_idx = pd.cut(x, bins=edges, labels=False, right=False)
+    bin_idx = pd.cut(x, bins=edges, labels=False, right=True, include_lowest=True)
 
     total_event    = max(int(y.sum()), 1)
     total_nonevent = max(int((1 - y).sum()), 1)
@@ -434,8 +436,9 @@ def enforce_monotonic_traced(
     y         : np.ndarray,
     direction : str,
     feature_name: str = "feature",
+    method    : str = "event_rate",
     verbose   : bool = True,
-) -> MergeTrace:
+) -> Tuple[MergeTrace, List[float]]:
     """
     Phiên bản có TRACE của _enforce_monotonic_by_merge.
 
@@ -484,23 +487,34 @@ def enforce_monotonic_traced(
     if verbose:
         print(f"  Bước 0 (ban đầu): {len(cuts)+1} bins | "
               f"Event rates: {[f'{e*100:.1f}%' for e in er0]}")
-
+    # Đưa tìm vi phạm về thành một hàm
+    def find_violation_idx_by_event_rate(er, direction):
+        for i in range(len(er) - 1):
+            if abs(er[i] - er[i+1]) < SAME_ER_THRESHOLD:
+                return i
+            if direction == "ascending"  and er[i] > er[i+1] + EPSILON:
+                return i
+            if direction == "descending" and er[i] < er[i+1] - EPSILON:
+                return i
+        return None
+    def find_violation_idx_by_woe(woe, direction):
+        for i in range(len(woe) - 1):
+            if abs(woe[i] - woe[i+1]) < SAME_WOE_THRESHOLD:
+                return i
+            if direction == "ascending"  and woe[i] > woe[i+1] + EPSILON:
+                return i
+            if direction == "descending" and woe[i] < woe[i+1] - EPSILON:
+                return i
+        return None
     # ── Vòng lặp merge ────────────────────────────────────────────────────
     for iteration in range(200):
         er, woe, ns = _get_bin_stats(cuts, x, y)
-
-        # Tìm vi phạm đầu tiên
-        violation_idx = None
-        for i in range(len(er) - 1):
-            if abs(er[i] - er[i+1]) < 1e-3:
-                violation_idx = i
-                break
-            if direction == "ascending"  and er[i] > er[i+1] + EPSILON:
-                violation_idx = i
-                break
-            if direction == "descending" and er[i] < er[i+1] - EPSILON:
-                violation_idx = i
-                break
+        if method == "event_rate":
+            violation_idx = find_violation_idx_by_event_rate(er, direction)
+        elif method == "woe":
+            violation_idx = find_violation_idx_by_woe(woe, direction)
+        else:
+            raise ValueError(f"Invalid method: {method}")
 
         if violation_idx is None:
             # ── Đã monotonic: ghi bước cuối ──────────────────────────────
@@ -594,7 +608,7 @@ if __name__ == "__main__":
     print(f"Cuts ban đầu ({len(cuts)+1} bins): {[round(c,1) for c in cuts]}")
 
     # ── Chạy với trace ──────────────────────────────────────────────────
-    trace = enforce_monotonic_traced(
+    trace, cuts_final = enforce_monotonic_traced(
         cuts         = cuts,
         x            = x,
         y            = y,
