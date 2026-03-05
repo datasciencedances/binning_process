@@ -28,9 +28,53 @@ from binning_process.core.utils import (
     compute_woe_iv_table,
     woe_table_to_pct_per_bin,
 )
-from binning_process.report import fig_to_base64
+import io
+import base64
+def fig_to_base64(fig, dpi: int = 100, **savefig_kw) -> str:
+    """Chuyển matplotlib Figure thành chuỗi base64 PNG để nhúng HTML."""
+    if fig is None:
+        return ""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=dpi, **savefig_kw)
+    buf.seek(0)
+    out = base64.b64encode(buf.getvalue()).decode("utf-8")
+    plt.close(fig)
+    return out
+def _plot_final_woe_er(model) -> Optional[plt.Figure]:
+    """
+    Plot final WOE, final event rate và tỷ lệ mẫu (%) theo bin (Overview).
+    Dùng _draw_woe_axes / _draw_event_rate_axes của BaseBinner cho 2 cột đầu.
+    """
+    df = getattr(model, "final_woe_table_", None)
+    if df is None or df.empty:
+        return None
 
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    if not isinstance(axes, (list, tuple, np.ndarray)):
+        axes = [axes]
+    ax_woe, ax_er, ax_n = axes
 
+    model._draw_woe_axes(ax_woe, df, "Final")
+    model._draw_event_rate_axes(ax_er, df, "Final")
+
+    # Số lượng mẫu từng bin (% n_total) + đường min_bin_size
+    x_pos = list(range(len(df)))
+    total_n = df["n_total"].sum()
+    n_pct = df["n_total"] / max(total_n, 1) * 100
+    ax_n.bar(x_pos, n_pct, color="#9b59b6", edgecolor="white", linewidth=0.8, zorder=3)
+    min_bin = getattr(model, "min_bin_size", 0.0)
+    if min_bin and min_bin > 0:
+        ax_n.axhline(min_bin * 100, color="red", linestyle="--", linewidth=1.0, label=f"min_bin_size = {min_bin*100:.1f}%")
+        ax_n.legend(fontsize=7)
+    ax_n.set_title("Tỷ lệ số mẫu (%) từng Bin", fontweight="bold")
+    ax_n.set_xticks(x_pos)
+    ax_n.set_xticklabels(df["bin"], rotation=35, ha="right", fontsize=8)
+    ax_n.set_ylabel("Tỷ lệ mẫu (%)")
+    for i, (cnt, pct) in enumerate(zip(df["n_total"], n_pct)):
+        ax_n.text(i, pct + 0.5, f"{cnt}\n({pct:.1f}%)", ha="center", fontsize=7.5)
+
+    fig.tight_layout()
+    return fig
 def _compute_ks_from_woe_table(woe_table: pd.DataFrame) -> float:
     """
     Tính KS từ bảng WOE (dùng n_event, n_nonevent).
@@ -173,6 +217,8 @@ def generate_compare_report_viz(
     feature_cols: List[str],
     output_path: str,
     df_valid: Optional[pd.DataFrame] = None,
+    numerical_feature_cols: Optional[List[str]] = None,
+    categorical_feature_cols: Optional[List[str]] = None,
     max_bins: int = 6,
     n_init_bins: int = 20,
     max_depth: int = 4,
@@ -184,11 +230,16 @@ def generate_compare_report_viz(
     """
     Phiên bản mở rộng của generate_compare_report với visualize phong phú hơn.
 
+    - numerical_feature_cols / categorical_feature_cols: tùy chọn; nếu truyền thì
+      cột trong numerical_feature_cols dùng methods numerical, trong categorical_feature_cols
+      dùng categorical; cột không nằm trong cả hai thì tự detect theo dtype.
     - Giữ logic compare_methods tương tự report.py.
     - Thêm Dashboard + các plot train vs valid per feature.
     """
     use_valid = df_valid is not None and len(df_valid) > 0
     y_train = df_train[target_col]
+    num_set = set(numerical_feature_cols or [])
+    cat_set = set(categorical_feature_cols or [])
 
     per_feature: List[Dict[str, Any]] = []
     summary_rows: List[Dict[str, Any]] = []
@@ -200,14 +251,21 @@ def generate_compare_report_viz(
             continue
 
         x_train = df_train[col]
+        if col in num_set:
+            is_numerical = True
+        elif col in cat_set:
+            is_numerical = False
+        else:
+            is_numerical = pd.api.types.is_numeric_dtype(x_train)
         if verbose:
-            print(f"  [Viz] Feature: {col} ...")
+            print(f"  [Viz] Feature: {col} ({'numerical' if is_numerical else 'categorical'}) ...")
 
         try:
             result, fitted = compare_methods(
                 x=x_train,
                 y=y_train,
                 feature_name=col,
+                is_numerical=is_numerical,
                 max_bins=max_bins,
                 n_init_bins=n_init_bins,
                 max_depth=max_depth,
@@ -249,7 +307,6 @@ def generate_compare_report_viz(
             try:
                 # Tránh import vòng: dùng model._draw_* trong report.py via fig_to_base64
                 # Ở đây giả định model có final_woe_table_ giống BaseBinner.
-                from binning_process.report import _plot_final_woe_er  # type: ignore
 
                 fig_final = _plot_final_woe_er(model)
                 overview_final_plots[name] = fig_to_base64(fig_final, dpi=dpi) if fig_final else ""
