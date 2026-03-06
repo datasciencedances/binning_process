@@ -20,9 +20,8 @@ from binning_process.numerical.supervised import (
     NumericalDecisionTreeBinner,
     NumericalKSOptimalBinner,
     NumericalMDLPBinner,
-    NumericalQuantileBinner,
 )
-from binning_process.numerical.unsupervised import NumericalKMeansBinner
+from binning_process.numerical.unsupervised import NumericalKMeansBinner, NumericalQuantileBinner
 
 # Numerical: tên -> (class, n_init_bins?, max_depth?)
 NUMERICAL_METHOD_CONFIG: Dict[str, dict] = {
@@ -33,7 +32,6 @@ NUMERICAL_METHOD_CONFIG: Dict[str, dict] = {
     "KS-Optimal": {"cls": NumericalKSOptimalBinner},
     "KMeans": {"cls": NumericalKMeansBinner, "n_init_bins": True, "random_state": 0},
 }
-
 # Categorical: tên -> class
 CATEGORICAL_METHOD_CONFIG: Dict[str, dict] = {
     "WOEAdjacent": {"cls": CategoricalWOEAdjacentBinner},

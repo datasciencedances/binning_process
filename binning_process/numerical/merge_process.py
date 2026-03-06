@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import warnings
 
-from binning_process.core.values import EPSILON, SAME_ER_THRESHOLD, SAME_WOE_THRESHOLD
+from binning_process.core.values import EPSILON, SAME_ER_THRESHOLD, SAME_WOE_THRESHOLD  
 
 warnings.filterwarnings("ignore")
 
@@ -434,6 +434,7 @@ def enforce_monotonic_traced(
     direction : str,
     feature_name: str = "feature",
     method    : str = "event_rate",
+    threshold : float = SAME_ER_THRESHOLD,
     verbose   : bool = True,
 ) -> Tuple[MergeTrace, List[float]]:
     """
@@ -500,12 +501,73 @@ def enforce_monotonic_traced(
                 return i
         return None
     # ── Vòng lặp merge ────────────────────────────────────────────────────
+
     for iteration in range(200):
         er, woe, ns = _get_bin_stats(cuts, x, y)
         if method == "event_rate":
             violation_idx = find_violation_idx_by_event_rate(er, direction)
         elif method == "woe":
             violation_idx = find_violation_idx_by_woe(woe, direction)
+        else:
+            raise ValueError(f"Invalid method: {method}")
+
+        if violation_idx is None:
+            break
+
+        # ── Ghi lại bước merge ───────────────────────────────────────────
+        step_no   += 1
+        cuts_old   = list(cuts)
+        sorted_cuts = sorted(cuts)
+        merged_cut  = sorted_cuts[violation_idx] if violation_idx < len(sorted_cuts) else None
+
+        # Xóa cut-point
+        if violation_idx < len(sorted_cuts):
+            cuts = sorted_cuts[:violation_idx] + sorted_cuts[violation_idx + 1:]
+        else:
+            cuts = sorted_cuts
+
+        step = MergeStep(
+            step_no       = step_no,
+            cuts_before   = cuts_old,
+            cuts_after    = list(cuts),
+            event_rates   = er,
+            n_bins_before = len(cuts_old) + 1,
+            n_bins_after  = len(cuts) + 1,
+            merged_pair   = (violation_idx, violation_idx + 1),
+            merged_cut    = merged_cut,
+            violation_er  = (er[violation_idx], er[violation_idx + 1]),
+            direction     = direction,
+            is_final      = False,
+            woe_values    = er,
+            n_samples     = ns,
+        )
+        step.woe_values = woe
+
+        trace.add_step(step)
+
+        if verbose:
+            arrow = "↑ nhưng" if direction == "ascending" else "↓ nhưng"
+            print(f"  Bước {step_no}: Bin{violation_idx}({er[violation_idx]*100:.1f}%) "
+                  f"{arrow} Bin{violation_idx+1}({er[violation_idx+1]*100:.1f}%) "
+                  f"→ GỘP (xóa cut={merged_cut:.2f})")
+
+    def find_violation_idx_closest_value_by_event_rate(er, threshold):
+        for i in range(len(er) - 1):
+            if abs(er[i] - er[i+1]) < threshold:
+                return i
+        return None
+    def find_violation_idx_closest_value_by_woe(woe, threshold):
+        for i in range(len(woe) - 1):
+             if abs(woe[i] - woe[i+1]) < threshold:
+                return i
+        return None
+
+    for iteration in range(200):
+        er, woe, ns = _get_bin_stats(cuts, x, y)
+        if method == "event_rate":
+            violation_idx = find_violation_idx_closest_value_by_event_rate(er, threshold)
+        elif method == "woe":
+            violation_idx = find_violation_idx_closest_value_by_woe(woe, threshold)
         else:
             raise ValueError(f"Invalid method: {method}")
 
@@ -575,6 +637,8 @@ def enforce_monotonic_traced(
 
     return trace, trace.final_cuts
 
+
+#
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  DEMO

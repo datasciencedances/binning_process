@@ -13,11 +13,11 @@ from binning_process.numerical.supervised import (
     NumericalDecisionTreeBinner,
     NumericalKSOptimalBinner,
     NumericalMDLPBinner,
-    NumericalQuantileBinner,
     NumericalLogOddsBinner,
     NumericalSpearmanBinner,
 )
 from binning_process.numerical.unsupervised import (
+    NumericalQuantileBinner,
     NumericalEqualWidthBinner,
     NumericalJenksNaturalBreaksBinner,
 )

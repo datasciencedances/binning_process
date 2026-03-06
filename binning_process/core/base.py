@@ -138,6 +138,7 @@ class BaseBinner(BaseEstimator, TransformerMixin):
             self.direction_ = self.direction
 
         self.algo_cuts_, self.init_cuts_ = self._find_cuts(x_main, y_main)
+        
         self.trace_, self.final_cuts_  = enforce_monotonic_traced(
             self.algo_cuts_, x_main, y_main, self.direction_,
             feature_name=self.feature_name, verbose=False

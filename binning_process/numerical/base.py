@@ -64,11 +64,13 @@ class NumericalBaseBinner(BaseEstimator, TransformerMixin):
         # Sau fit
         self.init_cuts_     : List[float]            = []
         self.algo_cuts_     : List[float]            = []
+        self.enforce_monotic_cuts_ : List[float]            = []
         self.final_cuts_    : List[float]            = []
         self.trace_         : Optional[MergeTrace]   = None
         self.direction_     : str                    = direction
         self.init_woe_table_ : Optional[pd.DataFrame] = None
         self.algo_woe_table_ : Optional[pd.DataFrame] = None
+        self.enforce_monotic_woe_table_ : Optional[pd.DataFrame] = None
         self.final_woe_table_ : Optional[pd.DataFrame] = None
         self.final_iv_      : float                  = 0.0
         self.algo_iv_       : float                  = 0.0
